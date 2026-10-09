@@ -2,7 +2,6 @@ import { ref } from "vue"
 import * as E from "fp-ts/Either"
 import { load, download, close } from "@hoppscotch/plugin-appload"
 import { getVersion } from "@tauri-apps/api/app"
-import { invoke } from "@tauri-apps/api/core"
 
 import { DesktopPersistenceService } from "~/services/persistence.service"
 import { InstanceStoreMigrationService } from "~/services/instance-store-migration.service"
@@ -465,13 +464,10 @@ export function useAppInitialization() {
       appVersion.value = "unknown"
     }
 
-    statusMessage.value = "Checking for version changes..."
-    try {
-      await invoke("check_and_backup_on_version_change")
-      console.log("Version backup check completed")
-    } catch (err) {
-      console.warn("Version backup check failed:", err)
-    }
+    // NOTE: The version-change backup already runs in the Rust setup path
+    // (`setup_version_backup` in lib.rs), so re-running it here from the
+    // webview is redundant and adds an extra IPC round-trip on the startup
+    // critical path.
 
     statusMessage.value = "Running data migration..."
     await migration.initialize()

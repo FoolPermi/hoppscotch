@@ -50,8 +50,26 @@ impl HoppApploadConfig {
     }
 
     pub fn write_vendored(&self) -> Result<(), HoppError> {
-        fs::write(&self.bundle_path, include_bytes!("../../bundle.zip"))?;
-        fs::write(&self.manifest_path, include_bytes!("../../manifest.json"))?;
+        let bundle: &[u8] = include_bytes!("../../bundle.zip");
+        let manifest: &[u8] = include_bytes!("../../manifest.json");
+
+        // The bundle and manifest are embedded in the binary, so their sizes
+        // only change when the app itself is updated. Skip re-writing them on
+        // every launch when the on-disk copies already match, avoiding a
+        // ~34MB write (and its I/O) on the startup critical path.
+        let bundle_up_to_date = fs::metadata(&self.bundle_path)
+            .map(|m| m.len() as usize == bundle.len())
+            .unwrap_or(false);
+        let manifest_up_to_date = fs::metadata(&self.manifest_path)
+            .map(|m| m.len() as usize == manifest.len())
+            .unwrap_or(false);
+
+        if !bundle_up_to_date {
+            fs::write(&self.bundle_path, bundle)?;
+        }
+        if !manifest_up_to_date {
+            fs::write(&self.manifest_path, manifest)?;
+        }
         Ok(())
     }
 
