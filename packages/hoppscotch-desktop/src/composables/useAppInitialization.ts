@@ -27,9 +27,6 @@ function mainDiag(msg: string) {
 
 export enum AppState {
   LOADING = "loading",
-  UPDATE_AVAILABLE = "update_available",
-  UPDATE_IN_PROGRESS = "update_in_progress",
-  UPDATE_READY = "update_ready",
   ERROR = "error",
   LOADED = "loaded",
 }

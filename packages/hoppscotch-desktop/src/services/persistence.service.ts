@@ -9,10 +9,6 @@ import {
   DESKTOP_SETTINGS_STORE_NAMESPACE,
   type DesktopSettings,
 } from "@hoppscotch/common/platform/desktop-settings"
-import {
-  UPDATE_STATE_SCHEMA,
-  UPDATE_STATE_STORE_KEY,
-} from "@hoppscotch/common/platform/update-state"
 import type { Instance } from "@hoppscotch/common/platform/instance"
 import { Log } from "@hoppscotch/common/kernel/log"
 
@@ -21,7 +17,6 @@ import {
   createStoreResource,
   type StoreResource,
 } from "~/kernel/store-resource"
-import type { UpdateState } from "~/types"
 
 const LOG_TAG = "persistence"
 
@@ -31,7 +26,6 @@ const LOG_TAG = "persistence"
 export const STORE_NAMESPACE = DESKTOP_SETTINGS_STORE_NAMESPACE
 
 export const STORE_KEYS = {
-  UPDATE_STATE: UPDATE_STATE_STORE_KEY,
   CONNECTION_STATE: "connectionState",
   RECENT_INSTANCES: "recentInstances",
   INSTANCE_AUTH_FAILURE: "instanceAuthFailure",
@@ -217,7 +211,6 @@ export class DesktopPersistenceService {
   private static instance: DesktopPersistenceService
 
   readonly desktopSettings: StoreResource<DesktopSettings>
-  readonly updateState: StoreResource<UpdateState | null>
   readonly connectionState: StoreResource<PersistedConnectionState | null>
   readonly recentInstances: StoreResource<Instance[]>
   // Cross-context record of the last instance whose auth flow failed.
@@ -236,12 +229,6 @@ export class DesktopPersistenceService {
       STORE_KEYS.DESKTOP_SETTINGS,
       DESKTOP_SETTINGS_SCHEMA,
       () => DESKTOP_SETTINGS_SCHEMA.parse({})
-    )
-    this.updateState = createStoreResource(
-      STORE_NAMESPACE,
-      STORE_KEYS.UPDATE_STATE,
-      UPDATE_STATE_SCHEMA.nullable(),
-      () => null
     )
     this.connectionState = createStoreResource(
       STORE_NAMESPACE,

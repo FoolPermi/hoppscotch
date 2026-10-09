@@ -32,10 +32,8 @@ export const DESKTOP_SETTINGS_STORE_KEY = "desktopSettings"
 // control in the settings UI ships without a visible change for existing
 // users.
 export const DESKTOP_SETTINGS_SCHEMA = z.object({
-  // Migrated from the legacy portable-only `PortableSettings`. A future
-  // epic ticket promotes `disableUpdateNotifications` to a user-facing
-  // control on all builds. For now it stays portable-only.
-  disableUpdateNotifications: z.boolean().default(false),
+  // Portable-mode welcome screen. When true, the first-run information
+  // dialog is skipped on subsequent launches.
   autoSkipWelcome: z.boolean().default(false),
 
   // Connection and startup behavior. The `connectionTimeoutMs` default
@@ -43,15 +41,6 @@ export const DESKTOP_SETTINGS_SCHEMA = z.object({
   // these fields are future scope.
   connectionTimeoutMs: z.number().int().positive().default(30_000),
   autoReconnectLastInstance: z.boolean().default(true),
-
-  // Update-pipeline controls. `disable*` polarity matches the existing
-  // `disableUpdateNotifications` field so all three update-related
-  // booleans read uniformly. `disableUpdateChecks` defaults to true so
-  // the launcher goes straight into the app on startup instead of
-  // blocking on the automatic update check; users can re-enable it from
-  // the settings UI. `disableUpdateDownloads` is future scope.
-  disableUpdateChecks: z.boolean().default(true),
-  disableUpdateDownloads: z.boolean().default(false),
 
   // Display and UX. The bounds match Tauri v2's `setZoom` accepted
   // range (0.2 to 10.0). A value outside that range would either be
