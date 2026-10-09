@@ -10,8 +10,16 @@ import {
 
 const expectedAllowedProvidersSchema = z.object({
   // currently supported values are "GOOGLE", "GITHUB", "EMAIL", "MICROSOFT", "SAML"
-  // keeping it as string to avoid backend accidentally breaking frontend when adding new providers
-  providers: z.array(z.string()),
+  // keeping it as string to avoid backend accidentally breaking frontend when adding new providers.
+  // The backend now returns provider objects (`{ provider: "GOOGLE" }`) while
+  // older builds returned plain strings, so accept both and normalise to the
+  // string ids the login UI expects.
+  providers: z.array(
+    z.union([
+      z.string(),
+      z.object({ provider: z.string() }).transform((entry) => entry.provider),
+    ])
+  ),
 })
 
 export const getAllowedAuthProviders = async () => {
