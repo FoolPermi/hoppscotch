@@ -53,21 +53,18 @@ impl HoppApploadConfig {
         let bundle: &[u8] = include_bytes!("../../bundle.zip");
         let manifest: &[u8] = include_bytes!("../../manifest.json");
 
-        // The bundle and manifest are embedded in the binary, so their sizes
-        // only change when the app itself is updated. Skip re-writing them on
-        // every launch when the on-disk copies already match, avoiding a
-        // ~34MB write (and its I/O) on the startup critical path.
-        let bundle_up_to_date = fs::metadata(&self.bundle_path)
-            .map(|m| m.len() as usize == bundle.len())
-            .unwrap_or(false);
-        let manifest_up_to_date = fs::metadata(&self.manifest_path)
-            .map(|m| m.len() as usize == manifest.len())
+        // The manifest lists every bundle file with its hash, so its content
+        // changes whenever any bundle file changes. Comparing the manifest
+        // (82KB) instead of the bundle (34MB) is cheap and reliable: when the
+        // on-disk manifest already matches the embedded one, the on-disk pair
+        // is current and the ~34MB bundle write is skipped on the startup
+        // critical path.
+        let up_to_date = fs::read(&self.manifest_path)
+            .map(|on_disk| on_disk == manifest)
             .unwrap_or(false);
 
-        if !bundle_up_to_date {
+        if !up_to_date {
             fs::write(&self.bundle_path, bundle)?;
-        }
-        if !manifest_up_to_date {
             fs::write(&self.manifest_path, manifest)?;
         }
         Ok(())
