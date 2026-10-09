@@ -39,7 +39,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from "vue"
+import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 
 import {
   useAppInitialization,
@@ -60,6 +61,18 @@ import VersionInfo from "./shared/VersionInfo.vue"
 
 const { appState, error, statusMessage, appVersion, loadRecent, initialize } =
   useAppInitialization()
+
+const appWindow = getCurrentWindow()
+
+// The launcher window starts hidden (see tauri.conf.json `visible: false`) so
+// startup goes straight to the main Hoppscotch window without flashing the
+// loader. Show it only when there is something blocking to display: an update
+// prompt or a fatal startup error.
+watch(appState, (state) => {
+  if (state === AppState.UPDATE_AVAILABLE || state === AppState.ERROR) {
+    void appWindow.show()
+  }
+})
 
 const updaterClient = new UpdaterClient()
 

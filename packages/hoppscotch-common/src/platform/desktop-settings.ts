@@ -46,11 +46,11 @@ export const DESKTOP_SETTINGS_SCHEMA = z.object({
 
   // Update-pipeline controls. `disable*` polarity matches the existing
   // `disableUpdateNotifications` field so all three update-related
-  // booleans read uniformly, and the on-by-default framing ("Disable X"
-  // with default false) nudges users toward keeping the update flow
-  // active. `disableUpdateChecks` is bound to a toggle in the current
-  // settings UI. `disableUpdateDownloads` is future scope.
-  disableUpdateChecks: z.boolean().default(false),
+  // booleans read uniformly. `disableUpdateChecks` defaults to true so
+  // the launcher goes straight into the app on startup instead of
+  // blocking on the automatic update check; users can re-enable it from
+  // the settings UI. `disableUpdateDownloads` is future scope.
+  disableUpdateChecks: z.boolean().default(true),
   disableUpdateDownloads: z.boolean().default(false),
 
   // Display and UX. The bounds match Tauri v2's `setZoom` accepted

@@ -11,7 +11,7 @@ pub mod webview;
 
 use std::sync::OnceLock;
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_window_state::StateFlags;
 
@@ -206,6 +206,13 @@ pub fn run() {
                 if let Err(e) = result {
                     tracing::warn!(error = %e, "Failed to set up native Edit menu; clipboard shortcuts may not work");
                 }
+            }
+
+            // The launcher window is created hidden (`visible: false` in
+            // tauri.conf.json). Hide it again here as a guard against a
+            // one-frame flash during window creation on macOS.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
             }
 
             tauri::async_runtime::block_on(async {

@@ -13,6 +13,8 @@
     "windows": [
       {
         "title": "main",
+        "visible": false,
+        "transparent": true,
         "width": 500,
         "height": 700,
         "decorations": false,

@@ -3,7 +3,8 @@ use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
 use tauri::{
-    command, AppHandle, LogicalPosition, Manager, Runtime, WebviewUrl, WebviewWindowBuilder,
+    command, window::Color, AppHandle, Listener, LogicalPosition, Manager, Runtime, Theme,
+    WebviewUrl, WebviewWindowBuilder,
 };
 
 use crate::{
@@ -185,6 +186,21 @@ pub async fn load<R: Runtime>(app: AppHandle<R>, options: LoadOptions) -> Result
 
     let sanitized_title = sanitize_window_label(&options.window.title)?;
 
+    // Match the native background to the current system theme before the
+    // window is shown, so it never flashes the wrong color. The launcher's
+    // "main" window has no theme override and therefore reports the system
+    // theme (Light/Dark). Fall back to dark if the theme can't be read.
+    let is_dark = app
+        .get_webview_window("main")
+        .and_then(|w| w.theme().ok())
+        .map(|theme| theme == Theme::Dark)
+        .unwrap_or(true);
+    let background = if is_dark {
+        Color(0x18, 0x18, 0x18, 0xFF)
+    } else {
+        Color(0xFF, 0xFF, 0xFF, 0xFF)
+    };
+
     // Build the webview with the kernel init script. Org context is carried
     // via the ?org= query param in the URL (set above) and preserved across
     // Vue Router navigations by a beforeEach guard in modules/router.ts.
@@ -194,6 +210,12 @@ pub async fn load<R: Runtime>(app: AppHandle<R>, options: LoadOptions) -> Result
             .title(sanitized_title)
             .inner_size(options.window.width, options.window.height)
             .resizable(options.window.resizable)
+            .background_color(background)
+            // Build hidden, then show after the macOS/windows setup below has
+            // matched the window appearance to the theme. Showing directly
+            // from `build()` leaves one frame where the native window chrome
+            // paints with the OS default before the appearance is applied.
+            .visible(false)
             .disable_drag_drop_handler();
 
     let window = match builder.build()
@@ -227,7 +249,7 @@ pub async fn load<R: Runtime>(app: AppHandle<R>, options: LoadOptions) -> Result
     {
         let window_clone = window.clone();
         window.run_on_main_thread(move || {
-            ui::macos::posit::setup_window(window_clone);
+            ui::macos::posit::setup_window(window_clone, is_dark);
         })?;
     }
 
@@ -246,7 +268,29 @@ pub async fn load<R: Runtime>(app: AppHandle<R>, options: LoadOptions) -> Result
         }
     }
 
-    let is_visible = window.is_visible().unwrap_or(false);
+    // Show only after the bundle signals that its first frame is painted,
+    // so the user never sees a blank window while the webview loads. The
+    // bundle emits `hopp-ready` from `hoppscotch-selfhost-web/src/main.ts`
+    // once `createHoppApp` has mounted and `nextTick` has flushed the DOM.
+    {
+        let show_window = window.clone();
+        let _ = window.listen("hopp-ready", move |_| {
+            let _ = show_window.show();
+        });
+
+        // Fallback in case the ready signal never arrives (e.g. an older
+        // bundle without the signal). `show()` is idempotent, so this is
+        // harmless when the signal has already fired.
+        let fallback = window.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let _ = fallback.show();
+        });
+    }
+
+    // The window is shown asynchronously above, so report success based on
+    // window creation rather than the current (still-hidden) visibility.
+    let is_visible = true;
     let response = LoadResponse {
         success: is_visible,
         window_label: label.clone(),

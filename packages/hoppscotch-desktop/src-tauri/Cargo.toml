@@ -58,3 +58,10 @@ tauri-plugin-window-state = "2.2.1"
 [features]
 default = []
 portable = []
+
+# Use the locally patched copy of the appload plugin (see
+# plugin-workspace/tauri-plugin-appload) instead of the upstream git
+# revision. The local copy sets a dark native background on windows it
+# creates so the bundled app doesn't flash white before its CSS loads.
+[patch."https://github.com/CuriousCorrelation/tauri-plugin-appload"]
+tauri-plugin-appload = { path = "../plugin-workspace/tauri-plugin-appload" }

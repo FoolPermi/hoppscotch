@@ -2,6 +2,25 @@
 <html lang="en">
   <head>
     <script>
+      // Apply the persisted/system color mode before the first paint so the
+      // page doesn't flash the stylesheet's default dark theme in light mode.
+      ;(function () {
+        var cls = "dark"
+        try {
+          var mode = localStorage.getItem("nuxt-color-mode") || "system"
+          cls =
+            mode === "system"
+              ? window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : mode
+        } catch (_) {
+          cls = "dark"
+        }
+        document.documentElement.className = cls
+      })()
+    </script>
+    <script>
       globalThis.import_meta_env = JSON.parse('"import_meta_env_placeholder"')
     </script>
     <title>Hoppscotch • Open source API development ecosystem</title>
