@@ -50,8 +50,23 @@ impl HoppApploadConfig {
     }
 
     pub fn write_vendored(&self) -> Result<(), HoppError> {
-        fs::write(&self.bundle_path, include_bytes!("../../bundle.zip"))?;
-        fs::write(&self.manifest_path, include_bytes!("../../manifest.json"))?;
+        let bundle: &[u8] = include_bytes!("../../bundle.zip");
+        let manifest: &[u8] = include_bytes!("../../manifest.json");
+
+        // The manifest lists every bundle file with its hash, so its content
+        // changes whenever any bundle file changes. Comparing the manifest
+        // (82KB) instead of the bundle (34MB) is cheap and reliable: when the
+        // on-disk manifest already matches the embedded one, the on-disk pair
+        // is current and the ~34MB bundle write is skipped on the startup
+        // critical path.
+        let up_to_date = fs::read(&self.manifest_path)
+            .map(|on_disk| on_disk == manifest)
+            .unwrap_or(false);
+
+        if !up_to_date {
+            fs::write(&self.bundle_path, bundle)?;
+            fs::write(&self.manifest_path, manifest)?;
+        }
         Ok(())
     }
 

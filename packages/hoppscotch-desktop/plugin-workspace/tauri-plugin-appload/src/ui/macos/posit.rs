@@ -422,8 +422,15 @@ impl WindowDelegate {
     }
 }
 
-pub fn setup_window<R: Runtime>(window: WebviewWindow<R>) {
+pub fn setup_window<R: Runtime>(window: WebviewWindow<R>, is_dark: bool) {
     let macos_window = MacosWindow::new(window, LogicalPosition::new(15.0, 16.0));
     macos_window.setup();
-    macos_window.update_theme(HexColor::WHITE);
+    // Match the window appearance to the system theme before the bundle
+    // emits `hopp-bg-changed` with its real background color.
+    let color = if is_dark {
+        HexColor::rgb(0x18, 0x18, 0x18)
+    } else {
+        HexColor::WHITE
+    };
+    macos_window.update_theme(color);
 }

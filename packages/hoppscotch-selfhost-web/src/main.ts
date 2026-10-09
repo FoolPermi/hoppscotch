@@ -196,6 +196,12 @@ async function initApp() {
   })
 
   if (platform === "desktop") {
+    // Signal the shell that the first frame has been painted so it can show
+    // this window without a blank flash. `nextTick` flushes the initial DOM
+    // render before the event is emitted.
+    await nextTick()
+    await emit("hopp-ready")
+
     const ALLOWED_DROP_SELECTORS = [
       '[draggable="true"]',
       ".draggable-content",

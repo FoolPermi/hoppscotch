@@ -5,13 +5,12 @@ pub mod error;
 pub mod logger;
 pub mod path;
 pub mod server;
-pub mod updater;
 pub mod util;
 pub mod webview;
 
 use std::sync::OnceLock;
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_window_state::StateFlags;
 
@@ -24,6 +23,11 @@ static SERVER_PORT: OnceLock<u16> = OnceLock::new();
 
 #[tauri::command]
 fn is_portable() -> bool {
+    cfg!(feature = "portable")
+}
+
+#[tauri::command]
+fn is_portable_mode() -> bool {
     cfg!(feature = "portable")
 }
 
@@ -208,6 +212,13 @@ pub fn run() {
                 }
             }
 
+            // The launcher window is created hidden (`visible: false` in
+            // tauri.conf.json). Hide it again here as a guard against a
+            // one-frame flash during window creation on macOS.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.hide();
+            }
+
             tauri::async_runtime::block_on(async {
                 if let Err(e) = setup_version_backup(app).await {
                     tracing::error!(error = %e, "Failed to setup version backup");
@@ -242,7 +253,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
@@ -256,12 +266,7 @@ pub fn run() {
             quit_app,
             backup::check_and_backup_on_version_change,
             config::set_desktop_config,
-            updater::check_for_updates,
-            updater::download_and_install_update,
-            updater::restart_application,
-            updater::cancel_update,
-            updater::get_download_progress,
-            updater::is_portable_mode,
+            is_portable_mode,
             path::get_config_dir,
             path::get_latest_dir,
             path::get_instance_dir,
