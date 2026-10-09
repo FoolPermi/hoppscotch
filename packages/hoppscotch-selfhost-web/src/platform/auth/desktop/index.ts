@@ -2,6 +2,7 @@ import * as E from "fp-ts/Either"
 
 import { BehaviorSubject, Subject } from "rxjs"
 import { Ref, ref, watch } from "vue"
+import { z } from "zod"
 
 import { content } from "@hoppscotch/kernel"
 
@@ -47,6 +48,28 @@ const isGettingInitialUser: Ref<null | boolean> = ref(null)
 
 const persistenceService = getService(PersistenceService)
 const interceptorService = getService(KernelInterceptorService)
+
+// The cloud device-login flow hands the desktop a Firebase custom token
+// instead of a ready-made access/refresh pair. These are the public Firebase
+// identifiers of the Hoppscotch cloud project (`postwoman-api`), the same
+// ones the web app ships. The Identity Toolkit / Secure Token endpoints are
+// gated by the API key's HTTP-referrer restriction and reject empty
+// referrers, so requests set `Referer` explicitly.
+const FIREBASE_API_KEY = "AIzaSyCMsFreESs58-hRxTtiqQrIcimh4i1wbsM"
+const FIREBASE_REFERER = "https://hoppscotch.io"
+const FIREBASE_CUSTOM_TOKEN_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${FIREBASE_API_KEY}`
+const FIREBASE_REFRESH_URL = `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`
+
+const firebaseSignInResponseSchema = z.object({
+  idToken: z.string(),
+  refreshToken: z.string(),
+})
+
+const firebaseRefreshResponseSchema = z.object({
+  id_token: z.string(),
+  refresh_token: z.string(),
+})
+
 // Deferred: this module is evaluated before `initKernel`, so a top-level
 // `getService(CookieJarService)` would permanently fail the jar's init and
 // the cleanup below would see an empty jar.
@@ -124,14 +147,15 @@ async function getInitialUserDetails(): Promise<
         "Content-Type": "application/json",
       },
       content: content.json({
+        // Only the fields the cloud schema exposes. Querying extra fields
+        // (e.g. isAdmin / createdOn) makes the cloud return a 400
+        // "Cannot query field" and the sign-in never completes.
         query: `query Me {
          me {
            uid
            displayName
            email
            photoURL
-           isAdmin
-           createdOn
          }
        }`,
       }),
@@ -281,6 +305,52 @@ export async function setInitialUser() {
   }
 }
 
+/**
+ * Exchanges the Firebase custom token delivered by the cloud device-login
+ * flow for a Firebase session (idToken + refreshToken) and loads the user.
+ *
+ * The cloud backend issues a Firebase custom token now, not a ready-made
+ * access/refresh pair, so the desktop must trade it in at Google Identity
+ * Toolkit before calling the Hoppscotch API with the resulting idToken.
+ */
+export async function loginWithCustomToken(customToken: string): Promise<void> {
+  const { response } = interceptorService.execute({
+    id: Date.now(),
+    url: FIREBASE_CUSTOM_TOKEN_URL,
+    method: "POST",
+    version: "HTTP/1.1",
+    headers: {
+      "Content-Type": "application/json",
+      Referer: FIREBASE_REFERER,
+    },
+    content: content.json({ token: customToken, returnSecureToken: true }),
+    meta: noCookieJarMeta(),
+  })
+
+  const res = await response
+  if (E.isLeft(res)) {
+    throw new Error("Could not reach the sign-in service")
+  }
+
+  const body = parseBodyAsJSON<unknown>(res.right.body)
+  if (body._tag !== "Some") {
+    throw new Error("Sign-in service returned an unreadable response")
+  }
+
+  const parsed = firebaseSignInResponseSchema.safeParse(body.value)
+  if (!parsed.success) {
+    throw new Error("Sign-in service returned an invalid response")
+  }
+
+  await persistenceService.setLocalConfig("access_token", parsed.data.idToken)
+  await persistenceService.setLocalConfig(
+    "refresh_token",
+    parsed.data.refreshToken
+  )
+
+  await setInitialUser()
+}
+
 async function refreshToken() {
   try {
     const refreshToken =
@@ -289,22 +359,39 @@ async function refreshToken() {
 
     const { response } = interceptorService.execute({
       id: Date.now(),
-      url: `${import.meta.env.VITE_BACKEND_API_URL}/auth/refresh`,
-      method: "GET",
+      url: FIREBASE_REFRESH_URL,
+      method: "POST",
       version: "HTTP/1.1",
       headers: {
-        Authorization: `Bearer ${refreshToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Referer: FIREBASE_REFERER,
       },
+      content: content.text(
+        `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+        "application/x-www-form-urlencoded"
+      ),
       meta: noCookieJarMeta(),
     })
 
     const res = await response
     if (E.isLeft(res)) return false
 
-    await setAuthCookies(res.right.headers)
-    const isSuccessful = res.right.status === 200
+    const body = parseBodyAsJSON<unknown>(res.right.body)
+    if (body._tag !== "Some") return false
 
-    if (isSuccessful && currentUser$.value) {
+    const parsed = firebaseRefreshResponseSchema.safeParse(body.value)
+    if (!parsed.success) return false
+
+    await persistenceService.setLocalConfig(
+      "access_token",
+      parsed.data.id_token
+    )
+    await persistenceService.setLocalConfig(
+      "refresh_token",
+      parsed.data.refresh_token
+    )
+
+    if (currentUser$.value) {
       authEvents$.next({
         event: "login",
         user: {
@@ -317,7 +404,7 @@ async function refreshToken() {
       })
     }
 
-    return isSuccessful
+    return true
   } catch (_err) {
     return false
   }

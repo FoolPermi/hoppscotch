@@ -27,6 +27,13 @@
       />
     </div>
   </div>
+  <div
+    v-else-if="authFlowState.type === 'done'"
+    class="flex flex-col items-center space-y-2"
+  >
+    <h2 class="text-secondaryDark font-semibold text-lg">Login complete</h2>
+    <p>You are now signed in to Hoppscotch Desktop.</p>
+  </div>
   <div v-else class="flex flex-col items-center">
     <p>There was an error processing your login...</p>
   </div>
@@ -42,20 +49,21 @@ import IconLink from "~icons/lucide/link"
 import IconCheck from "~icons/lucide/check"
 import { copyToClipboard } from "@hoppscotch/common/helpers/utils/clipboard"
 import { refAutoReset } from "@vueuse/core"
-import { PersistenceService } from "@hoppscotch/common/services/persistence"
-import { useService } from "dioc/vue"
-import { setInitialUser } from "@app/platform/auth/desktop"
+import { loginWithCustomToken } from "@app/platform/auth/desktop"
 import { z } from "zod"
 
-const persistenceService = useService(PersistenceService)
-
+// The cloud device-login flow returns a Firebase custom token as
+// `access_token` and no `refresh_token`, so only `access_token` is required.
 const DeviceTokenResponse = z.object({
   access_token: z.string(),
-  refresh_token: z.string(),
+  refresh_token: z.string().nullable().optional(),
 })
 
 type FlowStates =
-  { type: "loading" } | { type: "waiting"; openURL: string } | { type: "error" }
+  | { type: "loading" }
+  | { type: "waiting"; openURL: string }
+  | { type: "done" }
+  | { type: "error" }
 
 const authFlowState = ref<FlowStates>({ type: "loading" })
 const copyIcon = refAutoReset(IconLink, 1000)
@@ -91,18 +99,10 @@ onMounted(async () => {
         throw new Error("Token data returned from backend was invalid")
       }
 
-      const tokens = parseResult.data
-
-      await persistenceService.setLocalConfig(
-        "access_token",
-        tokens.access_token
-      )
-      await persistenceService.setLocalConfig(
-        "refresh_token",
-        tokens.refresh_token
-      )
-      await setInitialUser()
-    } catch (_) {
+      await loginWithCustomToken(parseResult.data.access_token)
+      authFlowState.value = { type: "done" }
+    } catch (err) {
+      console.error("Login failed:", err)
       authFlowState.value = { type: "error" }
     }
   })
